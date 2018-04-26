@@ -645,7 +645,7 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 		//fmt.Println(afterReset, " -> ", ports)
 		if port != "" {
 			fmt.Println("Found upload port: ", port)
-			time.Sleep(time.Millisecond * 10)
+			time.Sleep(time.Millisecond * 500)
 			break
 		}
 		if timeout {
@@ -663,13 +663,18 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 }
 
 func waitForPort(originalPort string) {
+	found := false
 	for {
 		ports, _ := serial.GetPortsList()
 		for _, el := range ports {
 			if originalPort == el {
 				time.Sleep(1 * time.Second)
+				found = true
 				break
 			}
+		}
+		if found {
+			break
 		}
 		time.Sleep(50 * time.Millisecond)
 		//fmt.Println(beforeReset, " -> ", ports)
