@@ -671,6 +671,7 @@ func waitForPort(originalPort string) {
 				break
 			}
 		}
+		time.Sleep(50 * time.Millisecond)
 		//fmt.Println(beforeReset, " -> ", ports)
 	}
 }
