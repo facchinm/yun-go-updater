@@ -665,7 +665,7 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 }
 
 func waitForPortDisappear(originalPort string) {
-	found := true
+	found := false 
 	for {
 		ports, _ := serial.GetPortsList()
 		for _, el := range ports {
