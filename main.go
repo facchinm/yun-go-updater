@@ -199,12 +199,10 @@ func main() {
 
 	for {
 
-		ports, _ := serial.GetPortsList()
-		port := waitReset(ports, *serialName, 60)
-		port = *serialName
+		waitForPort(*serialName)
 
 		// start the expecter
-		exp, _, err, serport := serialSpawn(port, time.Duration(10)*time.Second, expect.CheckDuration(100*time.Millisecond), expect.Verbose(false), expect.VerboseWriter(os.Stdout))
+		exp, _, err, serport := serialSpawn(*serialName, time.Duration(10)*time.Second, expect.CheckDuration(100*time.Millisecond), expect.Verbose(false), expect.VerboseWriter(os.Stdout))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -662,6 +660,19 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 	}
 
 	return port
+}
+
+func waitForPort(originalPort string) {
+	for {
+		ports, _ := serial.GetPortsList()
+		for _, el := range ports {
+			if originalPort == el {
+				time.Sleep(1 * time.Second)
+				break
+			}
+		}
+		//fmt.Println(beforeReset, " -> ", ports)
+	}
 }
 
 // differ returns the first item that differ between the two input slices
