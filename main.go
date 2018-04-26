@@ -199,7 +199,9 @@ func main() {
 	}
 
 	for {
-
+		cmd := exec.Command("clear")
+		cmd.Stdout = os.Stdout
+		cmd.Run()
 		waitForPort(*serialName)
 		// start the expecter
 		exp, _, err, serport := serialSpawn(*serialName, time.Duration(10)*time.Second, expect.CheckDuration(100*time.Millisecond), expect.Verbose(false), expect.VerboseWriter(os.Stdout))
