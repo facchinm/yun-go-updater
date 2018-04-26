@@ -146,7 +146,6 @@ func main() {
 	ipAddr := ""
 
 	flashBootloader := flag.Bool("bl", false, "Flash bootloader too (danger zone)")
-	interact := flag.Bool("i", false, "Open a serial console after flash has completed")
 	targetBoard := flag.String("board", "Yun", "Update to target board")
 
 	defaultServerAddr := flag.String("serverip", "", "<optional, only use if autodiscovery fails> Specify server IP address (this machine)")
@@ -198,60 +197,49 @@ func main() {
 		}
 	}
 
-	ports, _ := serial.GetPortsList()
-	port := waitReset(ports, *serialName, 60)
-	port = *serialName
+	for {
 
-	// start the expecter
-	exp, _, err, serport := serialSpawn(port, time.Duration(10)*time.Second, expect.CheckDuration(100*time.Millisecond), expect.Verbose(false), expect.VerboseWriter(os.Stdout))
-	if err != nil {
-		log.Fatal(err)
-	}
+		ports, _ := serial.GetPortsList()
+		port := waitReset(ports, *serialName, 60)
+		port = *serialName
 
-	execDir, _ := os.Executable()
-	execDir = filepath.Dir(execDir)
-	tftpDir := filepath.Join(execDir, "tftp")
+		// start the expecter
+		exp, _, err, serport := serialSpawn(port, time.Duration(10)*time.Second, expect.CheckDuration(100*time.Millisecond), expect.Verbose(false), expect.VerboseWriter(os.Stdout))
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	bootloaderSize := getFileSize(filepath.Join(tftpDir, bootloaderFirmwareName))
-	sysupgradeSize := getFileSize(filepath.Join(tftpDir, sysupgradeFirmwareName))
+		execDir, _ := os.Executable()
+		execDir = filepath.Dir(execDir)
+		tftpDir := filepath.Join(execDir, "tftp")
 
-	bootloaderFirmware := firmwareFile{name: bootloaderFirmwareName, size: bootloaderSize}
-	sysupgradeFirmware := firmwareFile{name: sysupgradeFirmwareName, size: sysupgradeSize}
+		bootloaderSize := getFileSize(filepath.Join(tftpDir, bootloaderFirmwareName))
+		sysupgradeSize := getFileSize(filepath.Join(tftpDir, sysupgradeFirmwareName))
 
-	ctx := context{flashBootloader: flashBootloader, serverAddr: serverAddr, ipAddr: ipAddr, bootloaderFirmware: bootloaderFirmware, sysupgradeFirmware: sysupgradeFirmware, targetBoard: targetBoard}
+		bootloaderFirmware := firmwareFile{name: bootloaderFirmwareName, size: bootloaderSize}
+		sysupgradeFirmware := firmwareFile{name: sysupgradeFirmwareName, size: sysupgradeSize}
 
-	output, err := flash(exp, ctx)
+		ctx := context{flashBootloader: flashBootloader, serverAddr: serverAddr, ipAddr: ipAddr, bootloaderFirmware: bootloaderFirmware, sysupgradeFirmware: sysupgradeFirmware, targetBoard: targetBoard}
 
-	for err != nil /* && strings.Contains(lastline, "Loading: T ")*/ {
-		fmt.Println(err)
-		fmt.Println(output)
-		fmt.Println("Flash failed, press button to restart " + *targetBoard)
-		bufio.NewReader(os.Stdin).ReadBytes('\n')
-		continue
-	}
+		output, err := flash(exp, ctx)
 
-	fmt.Println("Uploading YunFirstConfigPatched")
-	exp.Close()
-	serport.Close()
+		if err != nil /* && strings.Contains(lastline, "Loading: T ")*/ {
+			fmt.Println(err)
+			fmt.Println(output)
+			fmt.Println("Flash failed, press button to restart " + *targetBoard)
+		}
 
-	// upload the YunSerialTerminal to the board
-	port, err = upload(*serialName, "YunFirstConfigPatched.ino.hex")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err == nil {
-		fmt.Println("All done! Enjoy your updated " + *targetBoard)
-		bufio.NewReader(os.Stdin).ReadBytes('\n')
-	}
-
-	if *interact || err != nil {
 		exp.Close()
 		serport.Close()
-		serport, _ := serial.Open(port, &serial.Mode{BaudRate: 115200})
-		serialMonitor(serport)
+
+		if err == nil {
+			fmt.Println("All done! Enjoy your updated " + *targetBoard)
+		}
+
+		fmt.Println("==========================")
+		fmt.Println("== Attach another board ==")
+		fmt.Println("==========================")
 	}
-	//fmt.Println(lastline)
 }
 
 func serialMonitor(serport serial.Port) {
@@ -647,7 +635,7 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 			fmt.Println(ports, err, port)
 			break
 		}
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 500)
 	}
 
 	// Wait for the port to reappear
@@ -659,13 +647,13 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 		//fmt.Println(afterReset, " -> ", ports)
 		if port != "" {
 			fmt.Println("Found upload port: ", port)
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Millisecond * 10)
 			break
 		}
 		if timeout {
 			break
 		}
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 1000)
 	}
 
 	// try to upload on the existing port if the touch was ineffective
