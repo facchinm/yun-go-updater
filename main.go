@@ -140,7 +140,7 @@ func getFileSize(path string) int64 {
 func main() {
 
 	bootloaderFirmwareName := "u-boot-arduino-lede.bin"
-	sysupgradeFirmwareName := "ledeyun-17.11-r5461-ce9089c-ar71xx-generic-arduino-yun-squashfs-sysupgrade.bin"
+	sysupgradeFirmwareName := "ledeyun-17.11-r6773-8dd3a6e-ar71xx-generic-arduino-yun-squashfs-sysupgrade.bin"
 
 	serverAddr := ""
 	ipAddr := ""
@@ -152,9 +152,13 @@ func main() {
 	defaultServerAddr := flag.String("serverip", "", "<optional, only use if autodiscovery fails> Specify server IP address (this machine)")
 	defaultIpAddr := flag.String("boardip", "", "<optional, only use if autodiscovery fails> Specify YUN IP address")
 
+	serialName := flag.String("serial", "", "Specify YUN serial port")
+
+	flasher := flag.String("flasher", "", "Only flash a binary")
+
 	flag.Parse()
 	// serve tftp files
-	serveTFTP()
+	//serveTFTP()
 
 	serverAddr = *defaultServerAddr
 	ipAddr = *defaultIpAddr
@@ -168,7 +172,7 @@ func main() {
 		fmt.Println("Using " + serverAddr + " as server address and " + ipAddr + " as board address, confirm? (Y, n)")
 		fmt.Println("================")
 		response := ""
-		fmt.Scanln(&response)
+		//fmt.Scanln(&response)
 		if strings.Contains(response, "n") {
 			fmt.Print("Enter server IP address: ")
 			fmt.Scanln(&serverAddr)
@@ -177,38 +181,26 @@ func main() {
 		}
 	}
 
-	// get serial ports attached
-	var serialPort enumerator.PortDetails
-	ports, err := enumerator.GetDetailedPortsList()
-	if err != nil {
-		log.Fatal(err)
+	if *serialName == "" {
+		log.Fatal("No serial port suitable for updating " + *targetBoard)
+		os.Exit(1)
 	}
-	if len(ports) == 0 {
-		fmt.Println("No serial ports found!")
-		return
-	}
-	for _, port := range ports {
-		if port.IsUSB {
-			fmt.Printf("Found port: %s\n", port.Name)
-			fmt.Printf("USB ID     %s:%s\n", port.VID, port.PID)
-			fmt.Printf("USB serial %s\n", port.SerialNumber)
-			if canUse(port) {
-				fmt.Println("Using it")
-				serialPort = *port
-				break
-			}
+
+	if *flasher != "" {
+		for {
+			upload(*serialName, *flasher)
+			fmt.Println("==========================")
+			fmt.Println("== Attach another board ==")
+			fmt.Println("==========================")
+			ports, _ := serial.GetPortsList()
+			port := ""
+			port = waitReset(ports, port, 60)
 		}
 	}
 
-	if serialPort.Name == "" {
-		log.Fatal("No serial port suitable for updating " + *targetBoard)
-	}
-
-	// upload the YunSerialTerminal to the board
-	port, err := upload(serialPort.Name)
-	if err != nil {
-		log.Fatal(err)
-	}
+	ports, _ := serial.GetPortsList()
+	port := waitReset(ports, *serialName, 60)
+	port = *serialName
 
 	// start the expecter
 	exp, _, err, serport := serialSpawn(port, time.Duration(10)*time.Second, expect.CheckDuration(100*time.Millisecond), expect.Verbose(false), expect.VerboseWriter(os.Stdout))
@@ -228,26 +220,29 @@ func main() {
 
 	ctx := context{flashBootloader: flashBootloader, serverAddr: serverAddr, ipAddr: ipAddr, bootloaderFirmware: bootloaderFirmware, sysupgradeFirmware: sysupgradeFirmware, targetBoard: targetBoard}
 
-	lastline, err := flash(exp, ctx)
+	output, err := flash(exp, ctx)
 
-	retry_count := 0
+	for err != nil /* && strings.Contains(lastline, "Loading: T ")*/ {
+		fmt.Println(err)
+		fmt.Println(output)
+		fmt.Println("Flash failed, press button to restart " + *targetBoard)
+		bufio.NewReader(os.Stdin).ReadBytes('\n')
+		continue
+	}
 
-	for err != nil && retry_count < 3 /* && strings.Contains(lastline, "Loading: T ")*/ {
-		//retry with different IP addresses
-		fmt.Println(lastline)
-		fmt.Println(err.Error())
-		getServerAndBoardIP(&serverAddr, &ipAddr)
-		ctx.serverAddr = serverAddr
-		ctx.ipAddr = ipAddr
-		retry_count++
-		lastline, err = flash(exp, ctx)
+	fmt.Println("Uploading YunFirstConfigPatched")
+	exp.Close()
+	serport.Close()
+
+	// upload the YunSerialTerminal to the board
+	port, err = upload(*serialName, "YunFirstConfigPatched.ino.hex")
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	if err == nil {
 		fmt.Println("All done! Enjoy your updated " + *targetBoard)
-		if !*interact {
-			time.Sleep(10 * time.Second)
-		}
+		bufio.NewReader(os.Stdin).ReadBytes('\n')
 	}
 
 	if *interact || err != nil {
@@ -300,45 +295,13 @@ func serialMonitor(serport serial.Port) {
 }
 
 func flash(exp expect.Expecter, ctx context) (string, error) {
-	res, err := exp.ExpectBatch([]expect.Batcher{
-		&expect.BSnd{S: "\n"},
-		&expect.BExp{R: "root@"},
-		&expect.BSnd{S: "reboot -f\n"},
-	}, time.Duration(5)*time.Second)
 
-	if err != nil {
-		fmt.Println("Reboot the board using YUN RST button")
-	} else {
-		fmt.Println("Rebooting the board")
-	}
-
-	err = nil
-
-	// in bootloader mode:
-	// understand which version of the BL we are in
-	res, err = exp.ExpectBatch([]expect.Batcher{
-		&expect.BExp{R: "(stop with '([a-z]+)'|Hit any key to stop autoboot|type '([a-z]+)' to enter u-boot console)"},
-	}, time.Duration(20)*time.Second)
-
-	if err != nil {
-		return "", err
-	}
-
-	stopCommand := res[0].Match[len(res[0].Match)-1]
-
-	if stopCommand == "" {
-		stopCommand = res[0].Match[len(res[0].Match)-2]
-	}
-
-	if res[0].Match[0] == "Hit any key to stop autoboot" {
-		fmt.Println("Old YUN detected")
-		stopCommand = ""
-	}
+	stopCommand := "ard"
 
 	fmt.Println("Using stop command: " + stopCommand)
 
 	// call stop and detect firmware version (if it needs to be updated)
-	res, err = exp.ExpectBatch([]expect.Batcher{
+	res, err := exp.ExpectBatch([]expect.Batcher{
 		&expect.BSnd{S: stopCommand + "\n"},
 		&expect.BSnd{S: "printenv ipaddr\n"},
 		&expect.BExp{R: "([0-9a-zA-Z]+)>"},
@@ -477,6 +440,8 @@ func flash(exp expect.Expecter, ctx context) (string, error) {
 
 	// flash sysupgrade
 	res, err = exp.ExpectBatch([]expect.Batcher{
+		&expect.BSnd{S: "setenv board " + *ctx.targetBoard + "\n"},
+		&expect.BExp{R: "arduino>"},
 		&expect.BSnd{S: "printenv board\n"},
 		&expect.BExp{R: "board=" + *ctx.targetBoard},
 		&expect.BSnd{S: "tftp 0x80060000 " + ctx.sysupgradeFirmware.name + "\n"},
@@ -488,9 +453,10 @@ func flash(exp expect.Expecter, ctx context) (string, error) {
 		&expect.BSnd{S: "cp.b $fileaddr 0x9f050000 $filesize\n"},
 		&expect.BExp{R: "done"},
 		&expect.BSnd{S: "printenv serverip\n"},
-		&expect.BExp{R: "arduino>"},
-		&expect.BSnd{S: "reset\n"},
-		&expect.BExp{R: "Transferring control to Linux"},
+		&expect.BExp{R: ctx.serverAddr},
+		&expect.BSnd{S: "~5"},
+		//&expect.BSnd{S: "reset\n"},
+		//&expect.BExp{R: "Transferring control to Linux"},
 	}, time.Duration(90)*time.Second)
 
 	if err != nil {
@@ -528,7 +494,7 @@ func serialSpawn(port string, timeout time.Duration, opts ...expect.Option) (exp
 	return exp, ch, err, serPort
 }
 
-func upload(port string) (string, error) {
+func upload(port string, filename string) (string, error) {
 	port, err := reset(port, true)
 	if err != nil {
 		return "", err
@@ -539,7 +505,7 @@ func upload(port string) (string, error) {
 	execDir, _ := os.Executable()
 	execDir = filepath.Dir(execDir)
 	binDir := filepath.Join(execDir, "avr")
-	FWName := filepath.Join(binDir, "YunSerialTerminal.ino.hex")
+	FWName := filepath.Join(binDir, filename)
 	args := []string{"-C" + binDir + "/etc/avrdude.conf", "-v", "-patmega32u4", "-cavr109", "-P" + port, "-b57600", "-D", "-Uflash:w:" + FWName + ":i"}
 	err = program(filepath.Join(binDir, "bin", "avrdude"), args)
 	if err != nil {
