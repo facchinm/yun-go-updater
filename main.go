@@ -635,7 +635,7 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 			fmt.Println(ports, err, port)
 			break
 		}
-		time.Sleep(time.Millisecond * 500)
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	// Wait for the port to reappear
@@ -653,7 +653,7 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 		if timeout {
 			break
 		}
-		time.Sleep(time.Millisecond * 1000)
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	// try to upload on the existing port if the touch was ineffective
@@ -665,17 +665,15 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 }
 
 func waitForPortDisappear(originalPort string) {
-	found := false 
 	for {
+		found := false
 		ports, _ := serial.GetPortsList()
 		for _, el := range ports {
 			if originalPort == el {
-				time.Sleep(1 * time.Second)
 				found = true
-				break
 			}
 		}
-		if !found {
+		if found == false {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
