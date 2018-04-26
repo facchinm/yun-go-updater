@@ -237,6 +237,8 @@ func main() {
 		fmt.Println("==========================")
 		fmt.Println("== Attach another board ==")
 		fmt.Println("==========================")
+
+		waitForPortDisappear(*serialName)
 	}
 }
 
@@ -660,6 +662,25 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 	}
 
 	return port
+}
+
+func waitForPortDisappear(originalPort string) {
+	found := true
+	for {
+		ports, _ := serial.GetPortsList()
+		for _, el := range ports {
+			if originalPort == el {
+				time.Sleep(1 * time.Second)
+				found = true
+				break
+			}
+		}
+		if !found {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+		//fmt.Println(beforeReset, " -> ", ports)
+	}
 }
 
 func waitForPort(originalPort string) {
