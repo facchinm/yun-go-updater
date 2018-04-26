@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	expect "github.com/facchinm/goexpect"
 	"github.com/pin/tftp"
 	"github.com/pkg/errors"
@@ -188,11 +189,11 @@ func main() {
 	if *flasher != "" {
 		for {
 			upload(*serialName, *flasher)
-			fmt.Println("==========================")
-			fmt.Println("== Attach another board ==")
-			fmt.Println("==========================")
+			color.Green("==========================")
+			color.Green("== Attach another board ==")
+			color.Green("==========================")
 			ports, _ := serial.GetPortsList()
-			port := ""
+			port := *serialName
 			port = waitReset(ports, port, 60)
 		}
 	}
@@ -200,7 +201,6 @@ func main() {
 	for {
 
 		waitForPort(*serialName)
-
 		// start the expecter
 		exp, _, err, serport := serialSpawn(*serialName, time.Duration(10)*time.Second, expect.CheckDuration(100*time.Millisecond), expect.Verbose(false), expect.VerboseWriter(os.Stdout))
 		if err != nil {
@@ -224,19 +224,25 @@ func main() {
 		if err != nil /* && strings.Contains(lastline, "Loading: T ")*/ {
 			fmt.Println(err)
 			fmt.Println(output)
-			fmt.Println("Flash failed, press button to restart " + *targetBoard)
+			color.Red("KO")
+			color.Red("KO")
+			color.Red("KO")
+			color.Red("KO")
 		}
 
 		exp.Close()
 		serport.Close()
 
 		if err == nil {
-			fmt.Println("All done! Enjoy your updated " + *targetBoard)
+			color.Green("OK!")
+			color.Green("OK!")
+			color.Green("OK!")
+			color.Green("OK!")
 		}
 
-		fmt.Println("==========================")
-		fmt.Println("== Attach another board ==")
-		fmt.Println("==========================")
+		color.Yellow("=============================")
+		color.Yellow("== Connettere nuova scheda ==")
+		color.Yellow("=============================")
 
 		waitForPortDisappear(*serialName)
 	}
@@ -290,6 +296,7 @@ func flash(exp expect.Expecter, ctx context) (string, error) {
 
 	// call stop and detect firmware version (if it needs to be updated)
 	res, err := exp.ExpectBatch([]expect.Batcher{
+		&expect.BSnd{S: "x\n"},
 		&expect.BSnd{S: stopCommand + "\n"},
 		&expect.BSnd{S: "printenv ipaddr\n"},
 		&expect.BExp{R: "([0-9a-zA-Z]+)>"},
@@ -647,7 +654,7 @@ func waitReset(beforeReset []string, originalPort string, timeout_len int) strin
 		//fmt.Println(afterReset, " -> ", ports)
 		if port != "" {
 			fmt.Println("Found upload port: ", port)
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Millisecond * 1000)
 			break
 		}
 		if timeout {

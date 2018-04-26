@@ -1,0 +1,16 @@
+session_name: 4-pane-split
+windows:
+- window_name: dev window
+  layout: tiled
+  shell_command_before:
+    - cd /ssd/yun-go-updater                    # run as a first command in all panes
+  panes:
+    - shell_command:           # pane no. 1
+        - ./yun-go-updater -serverip=192.168.0.1 -boardip=192.168.0.2 -serial=/dev/ttyACM0          # run multiple commands in this pane
+    - shell_command:           # pane no. 1
+        - ./yun-go-updater -serverip=192.168.0.1 -boardip=192.168.0.3 -serial=/dev/ttyACM1          # run multiple commands in this pane
+    - shell_command:           # pane no. 1
+        - ./yun-go-updater -serverip=192.168.0.1 -boardip=192.168.0.4 -serial=/dev/ttyACM2          # run multiple commands in this pane
+    - shell_command:           # pane no. 1
+        - ./yun-go-updater -serverip=192.168.0.1 -boardip=192.168.0.5 -serial=/dev/ttyACM3          # run multiple commands in this pane
+
