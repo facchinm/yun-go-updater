@@ -141,7 +141,7 @@ func getFileSize(path string) int64 {
 func main() {
 
 	bootloaderFirmwareName := "u-boot-arduino-lede.bin"
-	sysupgradeFirmwareName := "ledeyun-17.11-r6773-8dd3a6e-ar71xx-generic-arduino-yun-squashfs-sysupgrade.bin"
+	sysupgradeFirmwareName := "ledeyun-17.11-r6773+1-8dd3a6e-ar71xx-generic-arduino-yun-squashfs-sysupgrade.bin"
 
 	serverAddr := ""
 	ipAddr := ""
@@ -188,13 +188,12 @@ func main() {
 
 	if *flasher != "" {
 		for {
+			waitForPort(*serialName)
 			upload(*serialName, *flasher)
 			color.Green("==========================")
 			color.Green("== Attach another board ==")
 			color.Green("==========================")
-			ports, _ := serial.GetPortsList()
-			port := *serialName
-			port = waitReset(ports, port, 60)
+			waitForPortDisappear(*serialName)
 		}
 	}
 
@@ -496,8 +495,6 @@ func upload(port string, filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	time.Sleep(1 * time.Second)
 
 	execDir, _ := os.Executable()
 	execDir = filepath.Dir(execDir)
