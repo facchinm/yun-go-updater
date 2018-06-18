@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	expect "github.com/facchinm/goexpect"
+	"github.com/fatih/color"
 	"github.com/pin/tftp"
 	"github.com/pkg/errors"
 	serial "go.bug.st/serial.v1"
@@ -156,6 +156,8 @@ func main() {
 
 	flasher := flag.String("flasher", "", "Only flash a binary")
 
+	restoreFirstConfig := flag.Bool("restore_first_config", false, "Restores first_config variable to 1")
+
 	flag.Parse()
 	// serve tftp files
 	//serveTFTP()
@@ -188,11 +190,39 @@ func main() {
 
 	if *flasher != "" {
 		for {
+			var err error
 			waitForPort(*serialName)
 			upload(*serialName, *flasher)
-			color.Green("==========================")
-			color.Green("== Attach another board ==")
-			color.Green("==========================")
+			if *restoreFirstConfig {
+				time.Sleep(2 * time.Second)
+				exp, _, _, serialPort := serialSpawn(*serialName, time.Duration(10)*time.Second, expect.CheckDuration(100*time.Millisecond), expect.Verbose(true), expect.VerboseWriter(os.Stdout))
+				_, err = exp.ExpectBatch([]expect.Batcher{
+					&expect.BSnd{S: "x\n"},
+					&expect.BExp{R: "Please press Enter to activate this console"},
+					&expect.BSnd{S: "\n"},
+					//&expect.BExp{R: "random: crng init done"},
+					//&expect.BSnd{S: "\n"},
+					&expect.BExp{R: "root@"},
+					&expect.BSnd{S: "uci set arduino.@arduino[0].first_configuration=1\n"},
+					&expect.BSnd{S: "uci commit\n"},
+					&expect.BExp{R: "root@"},
+					&expect.BSnd{S: "uci get arduino.@arduino[0].first_configuration\n"},
+					&expect.BExp{R: "1"},
+					&expect.BSnd{S: "halt"},
+				}, time.Duration(40)*time.Second)
+				serialPort.Close()
+				if err != nil {
+					color.Red("===============================")
+					color.Red("== restoreFirstConfig failed ==")
+					color.Red("===============================")
+				}
+				//fmt.Println(res)
+			}
+			if err == nil {
+				color.Green("==========================")
+				color.Green("== Attach another board ==")
+				color.Green("==========================")
+			}
 			waitForPortDisappear(*serialName)
 		}
 	}
